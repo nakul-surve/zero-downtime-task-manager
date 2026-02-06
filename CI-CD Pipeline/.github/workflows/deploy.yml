@@ -1,0 +1,87 @@
+name: Zero-Downtime Deployment
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:  # Allows manual triggering from GitHub UI
+
+jobs:
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
+      
+      - name: Add EC2 to known hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+      
+      - name: Deploy to EC2
+        env:
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          APP_DIR: ${{ secrets.APP_DIR }}
+        run: |
+          echo "🚀 Starting deployment to EC2..."
+          
+          # SSH into EC2 and execute deployment
+          ssh ${EC2_USER}@${EC2_HOST} << 'ENDSSH'
+            set -e
+            
+            # Navigate to application directory
+            cd ${APP_DIR}
+            
+            echo "📥 Pulling latest code from GitHub..."
+            git pull origin main
+            
+            echo "🔄 Running zero-downtime deployment..."
+            ./deploy.sh
+            
+            echo "✅ Deployment completed!"
+          ENDSSH
+      
+      - name: Verify Deployment
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          echo "🔍 Verifying deployment..."
+          
+          # Wait a few seconds for the deployment to stabilize
+          sleep 5
+          
+          # Check health endpoint
+          HEALTH_CHECK=$(curl -s http://${EC2_HOST}/health || echo "FAILED")
+          
+          if echo "$HEALTH_CHECK" | grep -q "healthy"; then
+            echo "✅ Health check passed!"
+            echo "$HEALTH_CHECK"
+          else
+            echo "❌ Health check failed!"
+            echo "$HEALTH_CHECK"
+            exit 1
+          fi
+      
+      - name: Deployment Status
+        if: always()
+        run: |
+          if [ ${{ job.status }} == 'success' ]; then
+            echo "🎉 Deployment successful!"
+          else
+            echo "💥 Deployment failed. Check the logs above."
+          fi
+      
+      - name: Notify on Failure
+        if: failure()
+        run: |
+          echo "⚠️  Deployment failed. Please check the application manually."
+          echo "You can rollback by running: ssh user@host 'cd ${APP_DIR} && ./deploy.sh'"
