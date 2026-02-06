@@ -14,7 +14,7 @@ RUN npm ci --only=production
 FROM node:18-alpine
 
 # Add metadata
-LABEL maintainer="your-email@example.com"
+LABEL maintainer="nakul.rootuser@gmail.com"
 LABEL description="Task Manager API - Zero Downtime Deployment"
 
 # Create non-root user for security
