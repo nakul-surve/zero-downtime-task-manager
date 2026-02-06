@@ -5,7 +5,7 @@ on:
     branches:
       - main
       - master
-  workflow_dispatch:  # Allows manual triggering from GitHub UI
+  
 
 jobs:
   deploy:
